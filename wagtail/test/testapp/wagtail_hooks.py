@@ -1,3 +1,5 @@
+import re
+
 from django.http import HttpResponse
 from django.utils.safestring import mark_safe
 
@@ -5,7 +7,10 @@ import wagtail.admin.rich_text.editors.draftail.features as draftail_features
 from wagtail import hooks
 from wagtail.admin.action_menu import ActionMenuItem
 from wagtail.admin.menu import MenuItem
-from wagtail.admin.rich_text.converters.html_to_contentstate import BlockElementHandler
+from wagtail.admin.rich_text.converters.html_to_contentstate import (
+    BlockElementHandler,
+    InlineStyleElementHandler,
+)
 from wagtail.admin.search import SearchArea
 from wagtail.admin.site_summary import SummaryItem
 from wagtail.admin.ui.components import Component
@@ -126,6 +131,38 @@ def register_intro_rule(features):
             },
         },
     )
+
+
+# register 'green' as a rich text feature which converts a `green` contentstate block
+# to a <green> tag in db HTML and vice versa, and registers a rewriter for it that
+# add an inline style
+@hooks.register("register_rich_text_features")
+def register_green_feature(features):
+    features.register_converter_rule(
+        "contentstate",
+        "green",
+        {
+            "from_database_format": {
+                "green": InlineStyleElementHandler("green"),
+            },
+            "to_database_format": {"style_map": {"green": "green"}},
+        },
+    )
+
+    class GreenRewriter:
+        TAG_RE = re.compile(r"<green>(.+?)</green>")
+
+        def replace_tag(self, match):
+            content = match.groups(1)[0]
+            return '<span style="color: green">{content}</span>'.format(content=content)
+
+        def extract_references(self, html):
+            return []
+
+        def __call__(self, html):
+            return self.TAG_RE.sub(self.replace_tag, html)
+
+    features.register_frontend_rewriter(GreenRewriter(), order=300)
 
 
 class PanicMenuItem(ActionMenuItem):
